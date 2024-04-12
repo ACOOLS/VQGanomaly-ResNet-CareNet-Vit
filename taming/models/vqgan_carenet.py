@@ -91,7 +91,7 @@ class VQModel(pl.LightningModule):
     def get_input(self, batch, k):
         x = batch[k]
         x = x.view(-1, *x.shape[2:]) 
-        print("x", x.shape)
+        #print("x", x.shape)
         try:
             if x[3] == 1:
                 x = x[:,:,:,0]
