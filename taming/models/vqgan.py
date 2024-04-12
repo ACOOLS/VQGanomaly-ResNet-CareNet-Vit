@@ -94,7 +94,7 @@ class VQModel(pl.LightningModule):
     def get_input(self, batch, k):
         x = batch[k]
 
-        #x = x.view(-1, *x.shape[2:]) 
+        x = x.view(-1, *x.shape[2:]) 
        
 
         try:
