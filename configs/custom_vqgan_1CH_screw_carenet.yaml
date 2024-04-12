@@ -13,9 +13,9 @@ model:
       #resolution: 256
       resolution: 256
       #in_channels: 3
-      in_channels: 1
+      in_channels: 3
       #out_ch: 3
-      out_ch: 1
+      out_ch: 3
       ch: 128
       ch_mult: [ 1,1,2,2,4]  # num_down = len(ch_mult)-1
       num_res_blocks: 2
@@ -26,7 +26,7 @@ model:
       target: taming.modules.losses.vqperceptual.VQLPIPSWithDiscriminator
       params:
         disc_conditional: False
-        disc_in_channels: 1
+        disc_in_channels: 3
         disc_start: 10000
         disc_weight: 0.8
         codebook_weight: 1.0
@@ -36,7 +36,7 @@ data:
   params:
     batch_size: 1
     #batch_size: 1
-    num_workers: 0
+    num_workers: 8
     train:
       target: taming.data.custom.CustomTrain_crop #taming.data.custom.CustomTrain
       params:
