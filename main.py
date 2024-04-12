@@ -12,6 +12,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint, Callback, LearningRateM
 from pytorch_lightning.utilities import rank_zero_only
 import shutil
 import yaml
+import os
+import time
 
 torch.set_default_dtype(torch.float32)
 
@@ -407,6 +409,7 @@ class ImageLogger(Callback):
 
 
 if __name__ == "__main__":
+    start_time = time.time()  # Début du chronométrage
     torch.cuda.empty_cache()
     # custom parser to specify config files, train, test and debug mode,
     # postfix, resume.
@@ -679,3 +682,19 @@ if __name__ == "__main__":
             dst = os.path.join(dst, "debug_runs", name)
             os.makedirs(os.path.split(dst)[0], exist_ok=True)
             os.rename(logdir, dst)
+            
+    # Code pour arrêter le chronomètre et calculer la durée
+    execution_time = time.time() - start_time  # Temps d'exécution en secondes
+    time_log_path = 'execution_time_log.txt'  # Chemin du fichier de log
+
+    # Enregistrement du temps d'exécution
+    if os.path.exists(time_log_path):
+        with open(time_log_path, 'r+') as file:
+            previous_time = float(file.read().strip())  # Lire le temps précédent
+            new_total_time = previous_time + execution_time  # Ajouter le nouveau temps au total
+            file.seek(0)
+            file.write(f"{new_total_time}\n")  # Écrire le nouveau total
+            file.truncate()
+    else:
+        with open(time_log_path, 'w') as file:
+            file.write(f"{execution_time}\n")  # Écrire le temps d'exécution initial
