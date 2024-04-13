@@ -30,5 +30,5 @@ apt install -y libgl1-mesa-glx
 pip install --upgrade opencv-python
 ```
 ```bash
-python main.py --base configs/custom_vqgan_1CH_screw_classique.yaml -t --gpus 0,
+python main.py --base configs/custom_vqgan_1CH_screw_classique_vastai.yaml -t --gpus 0,
 ```
