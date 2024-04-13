@@ -6,7 +6,7 @@ tmux source-file .tmux_conf
 ```bash
 git clone https://github.com/ACOOLS/VQGanomaly-ResNet-CareNet-Vit.git
 cd VQGanomaly-ResNet-CareNet-Vit
-wget https://github.com/ACOOLS/VQGanomaly-ResNet-CareNet-Vit/releases/download/screw/screw_last_version.zip
+wget https://github.com/ACOOLS/VQGanomaly-ResNet-CareNet-Vit/releases/download/screw/screw_last_version.zip && unzip screw_last_version.zip && rm screw_last_version.zip
 ```
 ```bash
 apt install python3.10-venv -y 
