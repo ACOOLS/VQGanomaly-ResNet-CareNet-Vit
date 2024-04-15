@@ -39,20 +39,14 @@ data:
     train:
       target: taming.data.custom.CustomTrain_crop #taming.data.custom.CustomTrain
       params:
-<<<<<<< HEAD
+
           image_folder: /notebooks/VQGanomaly-ResNet-CareNet-Vit/breast_dataset/train
-=======
-          image_folder: /home/aurelie/datasets/breast_dataset/train
->>>>>>> dcea81b3675d52f7752b73267ecc138effea63a9
           size: 1024
      
     validation:
       target: taming.data.custom.CustomTest_crop
       params:
-<<<<<<< HEAD
+
           image_folder: /notebooks/VQGanomaly-ResNet-CareNet-Vit/breast_dataset/val
-=======
-          image_folder: /home/aurelie/datasets/breast_dataset/val
->>>>>>> dcea81b3675d52f7752b73267ecc138effea63a9
 
           size: 1024
