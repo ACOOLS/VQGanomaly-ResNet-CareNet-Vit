@@ -12,10 +12,86 @@ from pytorch_lightning.callbacks import ModelCheckpoint, Callback, LearningRateM
 from pytorch_lightning.utilities import rank_zero_only
 import shutil
 import yaml
-import os
-import time
+import requests
+import logging
+logging.basicConfig(level=logging.INFO)
 
+class TelegramLogger:
+    def __init__(self, token, chat_id):
+        self.token = token
+        self.chat_id = chat_id
+        self.base_url = f"https://api.telegram.org/bot{token}/sendMessage"
+
+    def send_message(self, message):
+        data = {
+            'chat_id': self.chat_id,
+            'text': message,
+            'parse_mode': 'Markdown'
+        }
+        response = requests.post(self.base_url, data=data)
+        return response.json()
+
+class TelegramProgressLogger(pl.Callback):
+    def __init__(self, telegram_logger, config_filenames):
+        self.telegram_logger = telegram_logger
+        if isinstance(config_filenames, list) and config_filenames:
+            config_filename = config_filenames[0]  # Prenez le premier fichier si c'est une liste
+        else:
+            config_filename = config_filenames  # Sinon, utilisez la variable telle quelle
+
+        # Extraire les segments du nom du fichier
+        base_name = os.path.basename(config_filename)  # Extrait le nom du fichier, par exemple 'custom_vqgan_1CH_breast_classique.yaml'
+        name_without_ext = os.path.splitext(base_name)[0]  # Retire l'extension, donne 'custom_vqgan_1CH_breast_classique'
+        parts = name_without_ext.split('_')  # Divise la chaîne en parties basées sur '_'
+        self.dataset_type = parts[3]  # 'breast'
+        self.model_type = parts[4]  # 'classique'
+
+    def on_train_start(self, trainer, pl_module):
+        start_message = f"Début de l'entraînement pour {self.dataset_type} avec le modèle {self.model_type}..."
+        self.telegram_logger.send_message(start_message)
+
+    def on_epoch_end(self, trainer, pl_module):
+        train_loss = trainer.callback_metrics.get('train/total_loss', 'N/A')
+        val_loss = trainer.callback_metrics.get('val/aeloss_epoch', 'N/A')
+        if isinstance(train_loss, float) and isinstance(val_loss, float):
+            message = f"Époque {trainer.current_epoch}: Train Loss = {train_loss:.4f}, Val Loss = {val_loss:.4f}"
+        else:
+            message = f"Époque {trainer.current_epoch}: Train Loss = {train_loss}, Val Loss = {val_loss}"
+        self.telegram_logger.send_message(message)
+
+    def on_train_end(self, trainer, pl_module):
+        end_message = f"Entraînement terminé pour {self.dataset_type} avec le modèle {self.model_type}."
+        self.telegram_logger.send_message(end_message)
+
+        
 torch.set_default_dtype(torch.float32)
+
+def find_latest_logdir(logs_directory="logs"):
+    # Trouvez le dossier le plus récent dans le répertoire des logs
+    # Exclude directories named '.ipynb_checkpoints'
+    list_of_dirs = [
+        os.path.join(logs_directory, d) for d in os.listdir(logs_directory)
+        if os.path.isdir(os.path.join(logs_directory, d)) and d != ".ipynb_checkpoints"
+    ]
+    if not list_of_dirs:
+        return None
+    latest_dir = max(list_of_dirs, key=os.path.getmtime)
+    return latest_dir
+
+
+def read_status_file(logdir):
+    status_file = os.path.join(logdir, "status.txt")
+    if os.path.exists(status_file):
+        with open(status_file, "r") as file:
+            status = file.read().strip()
+        return status
+    return None
+
+def write_status_file(logdir, status):
+    status_file = os.path.join(logdir, "status.txt")
+    os.makedirs(os.path.dirname(status_file), exist_ok=True)
+    with open(status_file, "w") as file:
+        file.write(status)
 
 def get_obj_from_str(string, reload=False):
     # package_name = None
@@ -50,7 +126,8 @@ def get_parser(**parser_kwargs):
         nargs="?",
         help="postfix for logdir",
     )
-
+    parser.add_argument('--paperspace', action='store_true', help="Use the latest checkpoint if available")
+    
     parser.add_argument(
         "-r",
         "--resume",
@@ -60,6 +137,7 @@ def get_parser(**parser_kwargs):
         nargs="?",
         help="resume from logdir or checkpoint in logdir",
     )
+    
 
     parser.add_argument(
         "-b",
@@ -406,10 +484,13 @@ class ImageLogger(Callback):
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
         self.log_img(pl_module, batch, batch_idx, split="val")
 
+# Configuration du logger Telegram
+apiToken = '6312332443:AAGxzgoSAz8ls2Cxl1IX2uKTo1KnFZQnGeM'
+chatID = '5272107001'
+logger = TelegramLogger(apiToken, chatID)
 
 
-if __name__ == "__main__":
-    start_time = time.time()  # Début du chronométrage
+def main():
     torch.cuda.empty_cache()
     # custom parser to specify config files, train, test and debug mode,
     # postfix, resume.
@@ -463,6 +544,38 @@ if __name__ == "__main__":
     parser = Trainer.add_argparse_args(parser)
 
     opt, unknown = parser.parse_known_args()
+    
+    telegram_progress_logger = TelegramProgressLogger(logger, opt.base)
+    logdir = None
+    if opt.paperspace:
+        logdir = find_latest_logdir()
+        print(logdir)
+        if logdir and read_status_file(logdir) == "finished":
+            print("Training already completed, nothing to do.")
+            return 
+        elif logdir:
+            ckpt = os.path.join(logdir, "checkpoints", "last.ckpt")
+            opt.resume_from_checkpoint = ckpt
+            if os.path.exists(ckpt):
+                print(f"Resuming from checkpoint: {ckpt}")
+            else:
+                print("No checkpoint found, starting a new training session")
+                ckpt = None
+        else:
+            print("No previous log directory found, starting a new training session")
+            if opt.name:
+                name = "_"+opt.name
+            elif opt.base:
+                cfg_fname = os.path.split(opt.base[0])[-1]
+                cfg_name = os.path.splitext(cfg_fname)[0]
+                name = "_"+cfg_name
+            else:
+                name = ""
+            nowname = now+name+opt.postfix
+            logdir = os.path.join("logs", nowname)
+            os.makedirs(logdir, exist_ok=True)
+            ckpt = None
+            
     if opt.name and opt.resume:
         raise ValueError(
             "-n/--name and -r/--resume cannot be specified both."
@@ -497,12 +610,14 @@ if __name__ == "__main__":
         else:
             name = ""
         nowname = now+name+opt.postfix
+    if logdir is None :
         logdir = os.path.join("logs", nowname)
 
     ckptdir = os.path.join(logdir, "checkpoints")
     cfgdir = os.path.join(logdir, "configs")
     seed_everything(opt.seed)
-
+    
+    write_status_file(logdir, "in progress")
     try:
         # init and save configs
         configs = [OmegaConf.load(cfg) for cfg in opt.base]
@@ -573,6 +688,16 @@ if __name__ == "__main__":
                 "save_last": True,
             }
         }
+        # Configuration du ModelCheckpoint
+        model_checkpoint_callback = ModelCheckpoint(
+            monitor='val/aeloss_epoch', 
+            dirpath=ckptdir,
+            filename='{epoch:02d}-{val_aeloss_epoch:.2f}',
+            save_top_k=3,  # Changez ce nombre selon vos besoins
+            save_last=True,
+            verbose=True,
+            mode='min'
+        )
         if hasattr(model, "monitor"):
             print(f"Monitoring {model.monitor} as checkpoint metric.")
             default_modelckpt_cfg["params"]["monitor"] = model.monitor
@@ -614,7 +739,17 @@ if __name__ == "__main__":
         }
         callbacks_cfg = lightning_config.callbacks or OmegaConf.create()
         callbacks_cfg = OmegaConf.merge(default_callbacks_cfg, callbacks_cfg)
-        trainer_kwargs["callbacks"] = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
+        
+        # Instanciation des callbacks configurés via OmegaConf et ajout du callback Telegram
+        callbacks = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
+        callbacks.append(telegram_progress_logger)
+        callbacks.append(model_checkpoint_callback)
+        
+        trainer_kwargs["resume_from_checkpoint"] = ckpt
+        #trainer_kwargs["max_epochs"] = config.training.epochs
+        trainer_kwargs["callbacks"] = callbacks
+        
+        #trainer_kwargs["callbacks"] = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
         trainer_kwargs["gpus"] = -1
         trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
 
@@ -661,6 +796,7 @@ if __name__ == "__main__":
         if opt.train:
             try:
                 trainer.fit(model, data)
+                write_status_file(logdir, "finished")
             except Exception:
                 if model is not None:
                     melk()
@@ -682,19 +818,6 @@ if __name__ == "__main__":
             dst = os.path.join(dst, "debug_runs", name)
             os.makedirs(os.path.split(dst)[0], exist_ok=True)
             os.rename(logdir, dst)
-            
-    # Code pour arrêter le chronomètre et calculer la durée
-    execution_time = time.time() - start_time  # Temps d'exécution en secondes
-    time_log_path = 'execution_time_log.txt'  # Chemin du fichier de log
 
-    # Enregistrement du temps d'exécution
-    if os.path.exists(time_log_path):
-        with open(time_log_path, 'r+') as file:
-            previous_time = float(file.read().strip())  # Lire le temps précédent
-            new_total_time = previous_time + execution_time  # Ajouter le nouveau temps au total
-            file.seek(0)
-            file.write(f"{new_total_time}\n")  # Écrire le nouveau total
-            file.truncate()
-    else:
-        with open(time_log_path, 'w') as file:
-            file.write(f"{execution_time}\n")  # Écrire le temps d'exécution initial
+if __name__ == "__main__":
+    main()
