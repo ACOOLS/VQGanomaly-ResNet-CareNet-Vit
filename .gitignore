@@ -1,2 +1,9 @@
+brain_mri/
+breast_dataset/
+screw/
+wood/
+myenv/
 logs/
 *.pth
+*.zip
+screw

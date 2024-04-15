@@ -52,6 +52,9 @@ class CustomDatasetCrop(Dataset):
         # Charger l'image
         image = Image.open(self.image_paths[index])
         
+        # Redimensionner l'image à 1024x1024
+        image = image.resize((1024, 1024))
+        
         # Extraction de crops fixes
         crops = [image.crop((i % 16 * self.taille_crop, i // 16 * self.taille_crop, 
                              (i % 16 + 1) * self.taille_crop, (i // 16 + 1) * self.taille_crop))
