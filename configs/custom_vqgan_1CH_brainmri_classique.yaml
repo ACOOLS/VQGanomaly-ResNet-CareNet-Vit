@@ -39,12 +39,12 @@ data:
     train:
       target: taming.data.custom.CustomTrain_crop #taming.data.custom.CustomTrain
       params:
-          image_folder: /notebooks/VQGanomaly-ResNet-CareNet-Vit/brain_mri/train
+          image_folder: /root/VQGanomaly-ResNet-CareNet-Vit/brain_mri/train
           size: 1024
      
     validation:
       target: taming.data.custom.CustomTest_crop
       params:
-          image_folder: /notebooks/VQGanomaly-ResNet-CareNet-Vit/brain_mri/val
+          image_folder: /root/VQGanomaly-ResNet-CareNet-Vit/brain_mri/val
 
           size: 1024
