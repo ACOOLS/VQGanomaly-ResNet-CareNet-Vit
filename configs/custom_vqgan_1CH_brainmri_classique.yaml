@@ -35,7 +35,7 @@ data:
   target: main.DataModuleFromConfig
   params:
     batch_size: 1
-    num_workers: 0
+    num_workers: 8
     train:
       target: taming.data.custom.CustomTrain_crop #taming.data.custom.CustomTrain
       params:

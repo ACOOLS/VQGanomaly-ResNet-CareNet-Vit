@@ -12,6 +12,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, Callback, LearningRateM
 from pytorch_lightning.utilities import rank_zero_only
 import shutil
 import yaml
+<<<<<<< HEAD
 import requests
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -58,6 +59,10 @@ class TelegramProgressLogger(pl.Callback):
         else:
             message = f"Époque {trainer.current_epoch}: Train Loss = {train_loss}, Val Loss = {val_loss}"
         self.telegram_logger.send_message(message)
+=======
+import os
+import time
+>>>>>>> dcea81b3675d52f7752b73267ecc138effea63a9
 
     def on_train_end(self, trainer, pl_module):
         end_message = f"Entraînement terminé pour {self.dataset_type} avec le modèle {self.model_type}."
@@ -490,7 +495,12 @@ chatID = '5272107001'
 logger = TelegramLogger(apiToken, chatID)
 
 
+<<<<<<< HEAD
 def main():
+=======
+if __name__ == "__main__":
+    start_time = time.time()  # Début du chronométrage
+>>>>>>> dcea81b3675d52f7752b73267ecc138effea63a9
     torch.cuda.empty_cache()
     # custom parser to specify config files, train, test and debug mode,
     # postfix, resume.
@@ -818,6 +828,25 @@ def main():
             dst = os.path.join(dst, "debug_runs", name)
             os.makedirs(os.path.split(dst)[0], exist_ok=True)
             os.rename(logdir, dst)
+<<<<<<< HEAD
 
 if __name__ == "__main__":
     main()
+=======
+            
+    # Code pour arrêter le chronomètre et calculer la durée
+    execution_time = time.time() - start_time  # Temps d'exécution en secondes
+    time_log_path = 'execution_time_log.txt'  # Chemin du fichier de log
+
+    # Enregistrement du temps d'exécution
+    if os.path.exists(time_log_path):
+        with open(time_log_path, 'r+') as file:
+            previous_time = float(file.read().strip())  # Lire le temps précédent
+            new_total_time = previous_time + execution_time  # Ajouter le nouveau temps au total
+            file.seek(0)
+            file.write(f"{new_total_time}\n")  # Écrire le nouveau total
+            file.truncate()
+    else:
+        with open(time_log_path, 'w') as file:
+            file.write(f"{execution_time}\n")  # Écrire le temps d'exécution initial
+>>>>>>> dcea81b3675d52f7752b73267ecc138effea63a9
