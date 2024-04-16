@@ -576,6 +576,8 @@ def main():
             os.makedirs(logdir, exist_ok=True)
             ckpt = None
             
+    else :
+        ckpt = None
     if opt.name and opt.resume:
         raise ValueError(
             "-n/--name and -r/--resume cannot be specified both."
