@@ -743,7 +743,7 @@ def main():
         # Instanciation des callbacks configurés via OmegaConf et ajout du callback Telegram
         callbacks = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
         callbacks.append(telegram_progress_logger)
-        callbacks.append(model_checkpoint_callback)
+        #callbacks.append(model_checkpoint_callback)
         
         trainer_kwargs["resume_from_checkpoint"] = ckpt
         #trainer_kwargs["max_epochs"] = config.training.epochs
