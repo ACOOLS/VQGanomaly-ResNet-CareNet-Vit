@@ -1,3 +1,4 @@
+
 import os
 import numpy as np
 import albumentations
@@ -50,7 +51,12 @@ class CustomDatasetCrop(Dataset):
 
     def __getitem__(self, index):
         # Charger l'image
+        index = index+6
+        #print("self.image_paths[index]", self.image_paths)
         image = Image.open(self.image_paths[index])
+        
+        # Redimensionner l'image à 1024x1024
+        image = image.resize((1024, 1024))
         
         # Extraction de crops fixes
         crops = [image.crop((i % 16 * self.taille_crop, i // 16 * self.taille_crop, 
@@ -77,7 +83,7 @@ class CustomDatasetCrop(Dataset):
         # Empilement des tensors de crops
         crops_tensor = torch.stack(crops)
 
-        return {"image": crops_tensor}
+        return {"image": crops_tensor, "path": self.image_paths[index] }
 
     def __len__(self):
         return len(self.image_paths)
@@ -119,12 +125,23 @@ class CustomTrain_crop(CustomDatasetCrop):
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp')):
                     self.image_paths.append(os.path.join(root, file))
 
+
+import os
+
 class CustomTest_crop(CustomDatasetCrop):
     def __init__(self, size, image_folder, transform=None, random_crops=0):
-
         super().__init__(size, image_folder, transform, random_crops)
-   
-        for root, _, files in os.walk(image_folder):
+        
+        # Walk through the directory structure starting at 'image_folder'
+        for root, dirs, files in os.walk(image_folder):
             for file in files:
-                if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp')):
-                    self.image_paths.append(os.path.join(root, file))
+                file_path = os.path.join(root, file)
+                print("file", file)
+                print("root", root)
+                # Check if the path is indeed a file and not a directory
+                if os.path.isfile(file_path) and file.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp')):
+                    # Append the full path of the file to image_paths
+                    self.image_paths.append(file_path)
+
+       
+

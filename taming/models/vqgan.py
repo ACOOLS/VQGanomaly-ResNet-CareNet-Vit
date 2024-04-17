@@ -115,7 +115,7 @@ class VQModel(pl.LightningModule):
 
         if optimizer_idx == 0:
             # autoencode
-            aeloss, log_dict_ae = self.loss(qloss, x, xrec, optimizer_idx, self.global_step,
+            aeloss, log_dict_ae = self.loss(qloss, x, xrec, self.global_step,
                                             last_layer=self.get_last_layer(), split="train")
 
             self.log("train/aeloss", aeloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
@@ -124,7 +124,7 @@ class VQModel(pl.LightningModule):
 
         if optimizer_idx == 1:
             # discriminator
-            discloss, log_dict_disc = self.loss(qloss, x, xrec, optimizer_idx, self.global_step,
+            discloss, log_dict_disc = self.loss(qloss, x, xrec, self.global_step,
                                             last_layer=self.get_last_layer(), split="train")
             self.log("train/discloss", discloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
             self.log_dict(log_dict_disc, prog_bar=False, logger=True, on_step=True, on_epoch=True)
@@ -164,8 +164,8 @@ class VQModel(pl.LightningModule):
                    prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True)
         self.log_dict(log_dict_ae)
         self.log_dict(log_dict_disc)
-        # return self.log_dict
-        # return self.log_dict_ae, rec_loss.item(), aeloss.item(), discloss.item(), qloss.item()
+        #return self.log_dict
+        #return self.log_dict_ae, rec_loss.item(), aeloss.item(), discloss.item(), qloss.item()
         return log_dict_ae, log_dict_disc
 
     def configure_optimizers(self):

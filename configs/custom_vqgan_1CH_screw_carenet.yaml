@@ -36,19 +36,26 @@ data:
   params:
     batch_size: 1
     #batch_size: 1
-    num_workers: 8
+    num_workers: 0
     train:
       target: taming.data.custom.CustomTrain_crop #taming.data.custom.CustomTrain
       params:
-          image_folder: /home/aurelie/datasets/mvtec_anomaly/screw/train/good
+          image_folder: /scratch/coolsa/datasets/screw/train/good
+      #   #training_images_list_file: some/training.txt
           size: 1024
-
+      #   training_images_list_file: /home/aurelie/THESE/VQGanoDIP_benchmark/train_zipper.txt #/home/aurelie/THESE/VQGanoDIP_benchmark/zipper_crop_train.txt #C:/Users/arb/vqganodip_benchmark/train_PCBA_new_272.txt
+      #   size: 256 #1024
     validation:
       target: taming.data.custom.CustomTest_crop
       params:
-          image_folder: /home/aurelie/datasets/mvtec_anomaly/screw/val
+          image_folder: /scratch/coolsa/datasets/screw/val
+        #test_images_list_file: some/test.txt
           size: 1024
+        # test_images_list_file: /home/aurelie/THESE/VQGanoDIP_benchmark/train_zipper.txt #/home/aurelie/THESE/VQGanoDIP_benchmark/zipper_crop_valid.txt
+        # size: 256 #1024
 
 
-
+trainer:
+  accelerator: 'gpu'
+  devices: 4
     
