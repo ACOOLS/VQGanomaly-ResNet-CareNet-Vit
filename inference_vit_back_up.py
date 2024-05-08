@@ -14,14 +14,14 @@ from scipy import linalg
 from scipy.linalg import sqrtm
 from scipy.spatial import distance
 from scipy.stats import wasserstein_distance
-import argparse
+
 #import image_similarity_measures
 from image_similarity_measures.quality_metrics import *
 from torchvision.utils import save_image
 from torch.utils.data import DataLoader
 import datetime
 from time import time
-import glob
+
 from omegaconf import OmegaConf
 from pickle import load
 import sys
@@ -73,7 +73,7 @@ def load_config(config_path):
 	return config
 
 def load_vqgan(config, ckpt_path=None, is_gumbel=False):
-	print("config: ",config)
+	
 	model = VQModel(**config.model.params)
 	if ckpt_path is not None:
 		sd = torch.load(ckpt_path, map_location="cpu")["state_dict"]
@@ -138,7 +138,7 @@ def stack_reconstructions(input, reconstruction, diff_morpho, titles=[]):
 	
 	print(reconstruction)
 	#assert input.size == reconstruction.size == difference_w.size == highest_fid_windows_upscaled_all_visu_w.size == diff_ssim.size == diff_morpho.size
-	w, h = input.shape[0], input.shape[1]
+	w, h = input.size[0], input.size[1]
 	img = Image.new("RGB", (3*w, h))
 	img.paste(input, (0,0))
 	img.paste(reconstruction, (1*w,0))
@@ -220,7 +220,17 @@ def test_difference(image_np):
 	laplacian_uint8 = np.uint8(laplacian_abs)
 
 	# Normaliser l'image
-	laplacian_normalizedVQGanomaly-ResNet-CareNet-Vit/inference_vit_back_up.py
+	laplacian_normalized = cv2.normalize(laplacian_uint8, None, alpha=0, beta=255, norm_type=cv2.NORM_L2)
+
+	# Seuiller l'image pour isoler les zones de fort changement
+	_, thresholded = cv2.threshold(laplacian_normalized, thresh=0, maxval=255, type=cv2.THRESH_BINARY)
+
+
+	# Sauvegarder le résultat
+	cv2.imwrite('enhanced_image.png', thresholded)
+	return thresholded
+
+def custom_to_pil2(x):
 	
 	if isinstance(x, torch.Tensor):
 		x = x.detach().cpu().numpy()
@@ -350,21 +360,46 @@ def reconstruction_pipeline(image, name, filepath_directory_OUT, filepath_config
 		for i, crop in enumerate(image):
 			#print(f"Traitement du crop numéro {i} avec dimensions {crop.shape}")
 			#print("batch", batch.shape)
-			original_crops.extend(crop.unsqueeze(0))  # Stocker les crops originaux
+			original_crops.extend(crop.unsqueeze(0).numpy())  # Stocker les crops originaux
 			reconstructed_crop , xrec_e , emb_loss , loss_tensor = reconstruct_with_vqgan(crop.unsqueeze(0).to(DEVICE), model1024) 
-
+			#print("reconstructed_crop", reconstructed_crop.shape)
 			dict_loss = model1024.test_step(crop.unsqueeze(0).to(DEVICE),batch_idx=0)
 		
-			reconstructed_crops.extend(reconstructed_crop.cpu())  # Stocker les reconstructions
+			#econstructed_crops.append(reconstructed_crop.squeeze(0).cpu().numpy())
+			reconstructed_crops.extend(reconstructed_crop.cpu().numpy())  # Stocker les reconstructions
+			
+			#TEST 
+			#print("reconstructed_crops", reconstructed_crops)
+			score_ssim, diff_ssim = calculate_ssim(crop.unsqueeze(0), reconstructed_crop)
+			print("score_ssim", score_ssim)
+			#diff_ssim = (diff_ssim * 255).astype("uint8")
+			print("crop type", crop.dtype)
+			print("reconstructed_crop type ", reconstructed_crop.dtype)
+			
+			# image_ori_blurred = cv2.GaussianBlur(np.array(crop.unsqueeze(0)), (5, 5), 0)
+			# image_reco_blurred = cv2.GaussianBlur(np.array(reconstructed_crop), (5, 5), 0)
+
+			crop = crop.unsqueeze(0)  # Supposons que crop est (H, W)
+			reconstructed_crop = reconstructed_crop.unsqueeze(0)
+
+			# Calcul du SSIM
+			#ssim_val = ssim(crop, reconstructed_crop, data_range=1.0, size_average=True)  # Assurez-vous que data_range correspond à l'échelle de vos images
+
+			# Pour obtenir la carte de différence SSIM
 			
 			
 	
+			diff_crops_ssim.extend(diff_ssim)
+			print(f"Élément ajouté à l'indice {i}: {diff_ssim}")
+			print(f"Taille actuelle de la liste: {len(diff_crops_ssim)}")
+			# # Calculer la différence
 			diff_morph = torch.abs(crop.cpu() - reconstructed_crop.cpu())
 			diff_crops_morpho.extend(diff_morph.cpu())
 
 			
 			vutils.save_image(diff_morph.squeeze(0).squeeze(0), 'Test/diff_morph.png')
-	
+			save_image_np(diff_ssim, 'Test/diff_ssim.png')
+			# # Définissez une valeur de seuil basée sur votre analyse des images
 			seuil = 15  # Cette valeur peut nécessiter un ajustement
 
 			# # Appliquer un seuillage
@@ -383,50 +418,18 @@ def reconstruction_pipeline(image, name, filepath_directory_OUT, filepath_config
 			
 	
 
+
+
 	print('Preprocess Reconstruction')
 	# Reconstruire les images de 16x16 crops
 	full_image_shape = (1024, 1024, 3)  # Définir la forme complète de l'image désirée
 	full_diff_shape = (3, 1024, 1024)
 	crop_size = (64, 64, 3)  # Taille de chaque crop
 	crops_size_diff = (3, 64, 64)
-
-	#############################################################################################################""
-	#Input patchs 
-	patches_tensor_input = torch.stack(original_crops, dim=0)
-
-	input_image = torch.zeros(3, 1024, 1024)
-	index = 0
-	for i in range(16):  # 16 lignes de patches
-		for j in range(16):  # 16 colonnes de patches
-			input_image[:, i*64:(i+1)*64, j*64:(j+1)*64] = patches_tensor_input[index]
-			index += 1
-	torchvision.utils.save_image(input_image, 'Test/input_image.png')
-
-	#############################################################################################################""
-	#Reconstructed patchs 
-	patches_tensor_reco = torch.stack(reconstructed_crops, dim=0)
-
-	reconstructed_image = torch.zeros(3, 1024, 1024)
-	index = 0
-	for i in range(16):  # 16 lignes de patches
-		for j in range(16):  # 16 colonnes de patches
-			reconstructed_image[:, i*64:(i+1)*64, j*64:(j+1)*64] = patches_tensor_reco[index]
-			index += 1
-
-	# Continue with saving the image
-
-	torchvision.utils.save_image(reconstructed_image, 'Test/reconstructed_image.png')
-
-	#############################################################################################################""
-	#reconstructed_image = reconstruct_image_from_crops(reconstructed_crops, full_image_shape, crop_size)
-
-	#input_image = reconstruct_image_from_crops(original_crops, full_image_shape, crop_size)
+	reconstructed_image = reconstruct_image_from_crops(reconstructed_crops, full_image_shape, crop_size)
+	input_image = reconstruct_image_from_crops(original_crops, full_image_shape, crop_size)
 	#diff_image_morpho = reconstruct_image_from_diff(diff_crops_morpho, full_diff_shape, crops_size_diff)
 	
-
-
-
-	#PAtch de différences 
 	patches_tensor_morpho = torch.stack(diff_crops_morpho, dim=0)
 
 	full_image = torch.zeros(3, 1024, 1024)
@@ -440,23 +443,23 @@ def reconstruction_pipeline(image, name, filepath_directory_OUT, filepath_config
 
 	torchvision.utils.save_image(full_image, 'Test/diff_image_morpho.png')
 	
-	#############################################################################################################""
-	
 
-	#diff_image_ssim = reconstruct_image_from_crops(diff_crops_ssim, full_image_shape, crop_size)
+	print("Nombre d'éléments dans diff_crops_ssim:", len(diff_crops_ssim))
+
+	diff_image_ssim = reconstruct_image_from_crops(diff_crops_ssim, full_image_shape, crop_size)
 	
 	#print("diff_image", diff_image.dtype)
 	
 	
 	# # Sauvegarder l'image reconstruite
-	torchvision.utils.save_image(reconstructed_image, 'Test/reconstructed_image.png')
+	save_image_np(reconstructed_image, 'Test/reconstructed_image.png')
 
 	# # Sauvegarder l'image originale pour comparaison
-	torchvision.utils.save_image(input_image, 'Test/original_image.png')
+	save_image_np(input_image, 'Test/original_image.png')
 	# # Sauvegarder l'image originale pour comparaison
  
 	#vutils.save_image(diff_image_morpho, 'Test/diff_image_morpho.png')
-	#save_image_tensor(diff_image_ssim, 'Test/diff_image_ssim.png')
+	save_image_tensor(diff_image_ssim, 'Test/diff_image_ssim.png')
 
 	
 
@@ -763,19 +766,11 @@ def reconstruction_pipeline(image, name, filepath_directory_OUT, filepath_config
 	# 	# proportion_white = white_pixels / total_pixels
 	# 	# print(proportion_white)
 
-	print(type(input_image.size))
-	print(input_image.size)
-	print(type(reconstructed_image.size))
-	print(reconstructed_image.size)
-	print(type(full_image.size))
-	print(full_image.size)
 
-	#image_to_save = stack_reconstructions( input_image , reconstructed_image, full_image , titles=["Input", "Reconstruction", "Diff morpho"])
-	combined_tensor = torch.cat((input_image, reconstructed_image, full_image), dim=2)
-	torchvision.utils.save_image(combined_tensor, 'Test/combined_tensor.png')
+	# 	image_to_save = stack_reconstructions( input_image , reconstructed_image, diff_morph , titles=["Input", "Reconstruction", "Diff morpho"])
 
 
-	return input_image, reconstructed_image, combined_tensor
+	return input_image, reconstructed_image, diff_image
 
 
 #def main(i_loop,root,current_file,filepath_picture_IN,filepath_directory_OUT,filepath_config_DL_Model,filepath_DL_Model,filepath_config_ML_Model,filepath_scaler_ML_Model,filepath_ML_Model,Mask_HD,Mask_LD,Homography_path,model):
@@ -783,56 +778,20 @@ def reconstruction_pipeline(image, name, filepath_directory_OUT, filepath_config
 	
 
 if __name__ == "__main__":
-
-	parser = argparse.ArgumentParser(description="Inference VIT")
-	parser.add_argument('--data_path_test', default='/home/aurelie/datasets/mvtec_anomaly/screw/test', type=str, help='Chemin vers le train')
-	parser.add_argument("--folder_result", default="/home/aurelie/THESE/VQGanomaly-ResNet-CareNet-Vit/Results/vit/screw", type=str, help="Name of the wandb project")
-	parser.add_argument("--num_channels", default=3, type=int)
-
-    
-	args = parser.parse_args()
-
-	root_test = args.data_path_test
+	root_test = '/home/aurelie/datasets/mvtec_anomaly/screw/test'
 	
 
-	dataset_Test = CustomTest_crop(1024, root_test, transform=None, random_crops=0, num_channels=args.num_channels)
+	dataset_Test = CustomTest_crop(1024, root_test, transform=None, random_crops=0)
 
 	data_test = DataLoader(dataset_Test, batch_size=1, shuffle=False,  drop_last=False)
 
-				
-	output_dir = os.path.join(args.folder_result,"Test")
-
-
-	filepath_directory_OUT= output_dir
-	# Construct the directory path
-	directory_path = os.path.join(args.folder_result, "configs")
-
-	# Find all YAML files in the directory
-	yaml_files = glob.glob(os.path.join(directory_path, "*.yaml"))
-
-	# Assuming you want the first YAML file's path
-	if yaml_files:  # Check if there is at least one yaml file
-		filepath_config_DL_Model = yaml_files[0]
-	else:
-		print("No YAML files found in the directory.")
-
-	#filepath_config_DL_Model= os.path.join(args.folder_result, "configs", *.yaml)
-	# Construct the directory path
-	directory_path_check = os.path.join(args.folder_result, "checkpoints")
-
-	# Find all YAML files in the directory
-	check_files = glob.glob(os.path.join(directory_path_check, "*last.ckpt"))
-
-	# Assuming you want the first YAML file's path
-	if check_files:  # Check if there is at least one yaml file
-		filepath_DL_Model = check_files[0]
-	else:
-		print("No YAML files found in the directory.")
-
-	#filepath_DL_Model= os.path.join(args.folder_result, "checkpoitns",  *last.ckpt)
-	model='VQGanVIT'
-	current_file = os.path.join(output_dir, 'log_'+str(round(time()))+'.txt')
-		
+	current_file = '/home/aurelie/THESE/VQGanomaly-ResNet-CareNet-Vit/Test/log_result_crop_'+str(round(time()))+'.txt'
+					
+	output_dir = "/home/aurelie/THESE/VQGanomaly-ResNet-CareNet-Vit/Test"			
+	filepath_directory_OUT=output_dir
+	filepath_config_DL_Model="/home/aurelie/THESE/VQGanomaly-ResNet-CareNet-Vit/logs/2024-04-13T00-34-54_custom_vqgan_1CH_screw_vit/configs/2024-04-13T00-34-54-project.yaml"
+	filepath_DL_Model="/home/aurelie/THESE/VQGanomaly-ResNet-CareNet-Vit/logs/2024-04-13T00-34-54_custom_vqgan_1CH_screw_vit/checkpoints/last.ckpt"
+	model='VQGan'
 	if not os.path.exists(output_dir):
 		os.makedirs(output_dir)
 

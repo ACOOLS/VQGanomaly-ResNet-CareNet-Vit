@@ -43,10 +43,11 @@ class VQModel(pl.LightningModule):
             self.init_from_ckpt(ckpt_path, ignore_keys)
 
     def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:    
-        quant, diff = self.encode(x)
+        #quant, diff = self.encode(x)
+        quant, emb_loss, info, h, loss_tensor = self.encode(x)
         dec = self.decode(quant)
         
-        return dec, diff
+        return dec, emb_loss #diff
 
     def init_from_ckpt(self, path: str, ignore_keys: List[str] = list()):
         sd = torch.load(path, map_location="cpu")["state_dict"]
@@ -156,6 +157,27 @@ class VQModel(pl.LightningModule):
             self.log_dict(log_dict_disc, prog_bar=False, logger=True, on_step=True, on_epoch=True)
         
         return self.log_dict
+
+    def test_step(self, batch, batch_idx):
+        # x = self.get_input(batch, self.image_key)
+        x = batch
+        xrec, qloss = self(x)
+        aeloss, log_dict_ae = self.loss(qloss, x, xrec, 0, self.global_step,
+                                            last_layer=self.decoder.get_last_layer(), split="test")
+
+        discloss, log_dict_disc = self.loss(qloss, x, xrec, 1, self.global_step,
+                                            last_layer=self.decoder.get_last_layer(), split="test")
+        rec_loss = log_dict_ae["test/rec_loss"]
+        self.log("test/rec_loss", rec_loss,
+                   prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("test/aeloss", aeloss,
+                   prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True)
+        self.log_dict(log_dict_ae)
+        self.log_dict(log_dict_disc)
+        #return self.log_dict
+        #return self.log_dict_ae, rec_loss.item(), aeloss.item(), discloss.item(), qloss.item()
+        return log_dict_ae, log_dict_disc
+        
 
     def configure_optimizers(self) -> Tuple[List, List]:
         lr = self.learning_rate

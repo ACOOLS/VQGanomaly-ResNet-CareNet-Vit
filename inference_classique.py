@@ -27,8 +27,8 @@ from pickle import load
 import sys
 import os
 from pathlib import Path
-from taming.models.vqgan_vit import VQModel
-
+from taming.models.vqgan import VQModel
+import torchvision.utils as vutils
 #from taming.models.vqgan_carenet import VQModel
 from einops import reduce
 from sklearn.preprocessing import minmax_scale
@@ -57,6 +57,34 @@ if USE_CUDA == 'yes':
 else:
     DEVICE = torch.device("cpu")
 print([torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())])
+
+class Sobel(nn.Module):
+    def __init__(self):
+        super(Sobel, self).__init__()
+        # Définir les noyaux Sobel pour les gradients X et Y
+        Gx = torch.tensor([[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]], dtype=torch.float32)
+        Gy = torch.tensor([[-1., -2., -1.], [0., 0., 0.], [1., 2., 1.]], dtype=torch.float32)
+
+        # Empiler les noyaux pour les trois canaux (R, G, B)
+        self.weight_x = torch.stack([Gx, Gx, Gx]).view(3, 1, 3, 3)
+        self.weight_y = torch.stack([Gy, Gy, Gy]).view(3, 1, 3, 3)
+
+    def forward(self, img):
+        # Assurez-vous que l'image est en float et normalisée
+        img = img.float() / 255.0
+        img = img.cpu()
+        # Appliquer les filtres Sobel à chaque canal séparément
+        gradient_x = F.conv2d(img, self.weight_x, padding=1, groups=3)
+        gradient_y = F.conv2d(img, self.weight_y, padding=1, groups=3)
+
+        # Calculer la magnitude du gradient pour chaque canal
+        magnitude = torch.sqrt(gradient_x**2 + gradient_y**2)
+        gamma = 2.0  # Modifier cette valeur pour ajuster le contraste
+        magnitude = magnitude ** gamma            
+        magnitude = magnitude - magnitude.min()
+        magnitude = magnitude / magnitude.max() * 255.0
+        #magnitude_contrasted = magnitude.type(torch.uint8)
+        return magnitude
 
 def numpy_to_pil(np_array):
     # Assurez-vous que le tableau numpy est en uint8 et en RGB
@@ -328,6 +356,68 @@ def save_image_tensor(tensor, filename):
     # Save the image
 	img.save(filename)
 
+
+def calculate_mask(original, reconstruction, threshold_value, area_threshold, algo):
+    # Assurez-vous que les images sont des tenseurs PyTorch et qu'elles sont sur le même appareil
+    original = original.to(reconstruction.device)
+
+    if algo == "sobel":
+
+        sobel_filter = Sobel()
+        edge_original = sobel_filter(original)
+        edge_reconstruction = sobel_filter(reconstruction)
+        print("edge_reconstruction", edge_reconstruction.shape)
+        print("edge_original ",edge_original.shape)
+        reconstruction_np = edge_reconstruction.permute(1, 2, 0).cpu().numpy()
+        original_np = edge_original.permute(1, 2, 0).cpu().numpy()
+
+        print(reconstruction_np.shape, original_np.shape)
+
+        ssim_index, ssim_map = ssim(reconstruction_np, original_np, channel_axis=-1, full=True, win_size=7, data_range=reconstruction_np.max() - reconstruction_np.min())
+        print(ssim_index)
+        #print(ssim_map)
+        mask_diff = (ssim_map > threshold_value)
+
+        # Calculer la différence absolue
+        #diff = torch.abs(edge_original - edge_reconstruction)
+        # Convertir en niveaux de gris si nécessaire (en supposant que l'image est en RGB)
+        # if diff.shape[1] == 3:
+        #     diff = diff.mean(dim=1)
+        # else:
+        #     diff = diff
+        # diff = diff / diff.max()
+        #distance = mahalanobis(edge_original, edge_reconstruction)
+
+        #anomaly_mask = torch.where(diff > threshold_value, torch.ones_like(diff), torch.zeros_like(diff))
+
+    else :
+        #difference = torch.abs(reconstruction - original) 
+        reconstruction_np = reconstruction.permute(1, 2, 0).cpu().numpy()
+        original_np = original.permute(1, 2, 0).cpu().numpy()
+
+        print(reconstruction_np.shape, original_np.shape)
+
+        ssim_index, ssim_map = ssim(reconstruction_np, original_np, channel_axis=-1, full=True, win_size=7, data_range=reconstruction_np.max() - reconstruction_np.min())
+        print(ssim_index)
+        #print(ssim_map)
+        mask_diff = (ssim_map > threshold_value)
+
+        # Pour faire un masque blanc là où il y a des anomalies
+        #anomaly_mask = mask_diff.repeat(1, 3, 1, 1)  # Répéter le masque pour chaque canal de couleur
+        #anomaly_mask = anomaly_mask * torch.tensor([1.0] * 9).view(1, 9, 1, 1).to(device)
+
+    # Appliquer un seuil
+    #mask = diff_gray > threshold_value
+
+    # Calculer la zone du masque
+    #white_area = torch.sum(mask_diff).item()
+    #print("white_area", white_area)
+
+    # Déterminer le label
+    label = 1 if ssim_index < 0.94 else 0
+    #label = 1 if white_area > area_threshold else 0
+
+    return mask_diff, label 
 
 def reconstruction_pipeline(image, name, filepath_directory_OUT, filepath_config_DL_Model, filepath_DL_Model, patch_size, patch_count, scale_max, scale_step, worst_patch_count,model,size=320):
 
@@ -785,8 +875,10 @@ def reconstruction_pipeline(image, name, filepath_directory_OUT, filepath_config
 if __name__ == "__main__":
 
 	parser = argparse.ArgumentParser(description="Inference VIT")
+	parser.add_argument('--classes', default='screw', type=str, help='Chemin vers le train')
 	parser.add_argument('--data_path_test', default='/home/aurelie/datasets/mvtec_anomaly/screw/test', type=str, help='Chemin vers le train')
-	parser.add_argument("--folder_result", default="/home/aurelie/THESE/VQGanomaly-ResNet-CareNet-Vit/Results/vit/screw", type=str, help="Name of the wandb project")
+	parser.add_argument("--folder_model", default="/home/aurelie/THESE/VQGanomaly-ResNet-CareNet-Vit/Results/classique", type=str, help="Name of the wandb project")
+	parser.add_argument("--folder_result", default="/home/aurelie/THESE/VQGanomaly-ResNet-CareNet-Vit/Results/classique", type=str, help="Name of the wandb project")
 	parser.add_argument("--num_channels", default=3, type=int)
 
     
@@ -799,33 +891,36 @@ if __name__ == "__main__":
 
 	data_test = DataLoader(dataset_Test, batch_size=1, shuffle=False,  drop_last=False)
 
-				
-	output_dir = os.path.join(args.folder_result,"Test")
+	output_dir = os.path.join(args.folder_result,args.classes)
+
+	output_dir_test = os.path.join(output_dir,"Test")
 
 
-	filepath_directory_OUT= output_dir
+	filepath_directory_OUT= output_dir_test
 	# Construct the directory path
-	directory_path = os.path.join(args.folder_result, "configs")
+	directory_path = os.path.join(args.folder_model, "configs")
 
 	# Find all YAML files in the directory
-	yaml_files = glob.glob(os.path.join(directory_path, "*.yaml"))
+	yaml_files = glob.glob(os.path.join(directory_path, "*project.yaml"))
 
 	# Assuming you want the first YAML file's path
 	if yaml_files:  # Check if there is at least one yaml file
 		filepath_config_DL_Model = yaml_files[0]
+		print("filepath_config_DL_Model", filepath_config_DL_Model)
 	else:
 		print("No YAML files found in the directory.")
 
 	#filepath_config_DL_Model= os.path.join(args.folder_result, "configs", *.yaml)
 	# Construct the directory path
-	directory_path_check = os.path.join(args.folder_result, "checkpoints")
+	directory_path_check = os.path.join(args.folder_model, "checkpoints")
 
 	# Find all YAML files in the directory
-	check_files = glob.glob(os.path.join(directory_path_check, "*last.ckpt"))
+	check_files = glob.glob(os.path.join(directory_path_check, "last.ckpt"))
 
 	# Assuming you want the first YAML file's path
 	if check_files:  # Check if there is at least one yaml file
 		filepath_DL_Model = check_files[0]
+		print("filepath_DL_Model", filepath_DL_Model)
 	else:
 		print("No YAML files found in the directory.")
 
@@ -879,27 +974,68 @@ if __name__ == "__main__":
 		name = str(filepath_picture_IN[0])
 		input_image, reconstructed_image, diff_image = reconstruction_pipeline(image, name, filepath_directory_OUT, filepath_config_DL_Model, filepath_DL_Model, patch_size, patch_count, scale_max, scale_step, worst_patch_count, model, size=img_size)
 
+
+		mask, label_pred = calculate_mask(input_image, reconstructed_image, 0.1, 1, "sobele")
+		mask = torch.from_numpy(mask)
+		import torchvision.transforms as transforms
+		print("mask.shape: ",mask.shape)
+		# Convertir le masque de booléen à uint8 avec des valeurs de 0 ou 255
+		mask_uint8 = mask.to(torch.uint8) * 255
+
+		# Vérifier que les dimensions sont correctes (H, W, C)
+		#if mask_uint8.dim() == 3 and mask_uint8.shape[-1] != 3:
+		#	print("coucou")
+		mask_uint8 = mask_uint8.permute(2, 0, 1)  # Permuter si nécessaire (de C, H, W à H, W, C)
+
+		# Convertir le tensor PyTorch en image PIL
+		transform = transforms.ToPILImage()
+
+		print("mask_uint8", mask_uint8.shape)
+		mask_image = transform(mask_uint8)
+
+		# Enregistrer l'image
+		mask_image.save('mask_image.png')
+
+
+		#vutils.save_image(mask, "Test/mask.png", nrow=1)
+		#save_image(mask, "Test/mask.png")
+
+
 		big_folder_input = "Input_model"
+		big_folder_input = os.path.join(output_dir,big_folder_input)
+		os.makedirs(big_folder_input, exist_ok=True)
+		print("image input are : ",big_folder_input)
+
 		bug_folder_output = "output_model"
+		bug_folder_output = os.path.join(output_dir,bug_folder_output)
+		os.makedirs(bug_folder_output, exist_ok=True)
+		print("image input are : ",bug_folder_output)
+
 		nom_image = f"{categorie}_{os.path.basename(chemin)}"
 		print("nom image", nom_image)
 		
 		# Déterminer le dossier de sortie en fonction de la catégorie
-		sub_folder = "normal" if categorie == "good" else "anormal"
+		sub_folder = "normal" if categorie == "good" else "abnormal"
 		folder_input_path = os.path.join(big_folder_input, sub_folder)
 		folder_output_path = os.path.join(bug_folder_output, sub_folder)
+		
+		folder_diff_path = os.path.join(output_dir, "combined")
 
 		# Assurez-vous que les dossiers existent
 		os.makedirs(folder_input_path, exist_ok=True)
 		os.makedirs(folder_output_path, exist_ok=True)
+		os.makedirs(folder_diff_path, exist_ok=True)
 
 		# Sauvegarder les images
 		input_image_path = os.path.join(folder_input_path, nom_image)
 		output_image_path = os.path.join(folder_output_path, nom_image)
+		diff_image_path = os.path.join(folder_diff_path, nom_image)
 
 		# Utilisez votre fonction de sauvegarde d'image ici, par exemple cv2.imwrite ou une autre librairie
 		save_image(input_image, input_image_path)
 		save_image(reconstructed_image, output_image_path)
+		save_image(diff_image, diff_image_path)
+
 
 
 		print(f"Image sauvegardée: {input_image_path} et {output_image_path}")

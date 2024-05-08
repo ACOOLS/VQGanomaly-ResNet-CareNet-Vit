@@ -31,7 +31,7 @@ class CustomDataset(Dataset):
         # Charger l'image
         image = Image.open(self.image_paths[i])
         to_tensor = transforms.Compose([
-            transforms.Grayscale(num_output_channels=1),
+            #transforms.Grayscale(num_output_channels=1),
             transforms.Resize((self.size, self.size)),  # Correction ici
             transforms.ToTensor()
         ])
@@ -42,16 +42,17 @@ class CustomDataset(Dataset):
 
 
 class CustomDatasetCrop(Dataset):
-    def __init__(self, size, image_folder, transform=None, random_crops=16):
+    def __init__(self, size, image_folder, transform=None, random_crops=0, num_channels=3):
         self.image_paths = [os.path.join(image_folder, file_name) for file_name in os.listdir(image_folder)]
         self.transform = transform
         self.random_crops = random_crops
-        self.taille_crop = size // 16
-        self.num_crop = 16 * 16  # Nombre total de crops fixes
+        self.taille_crop = size // 8
+        self.num_crop = 8 * 8  # Nombre total de crops fixes
+        self.num_channels = num_channels
 
     def __getitem__(self, index):
         # Charger l'image
-        index = index+6
+        
         #print("self.image_paths[index]", self.image_paths)
         image = Image.open(self.image_paths[index])
         
@@ -59,8 +60,8 @@ class CustomDatasetCrop(Dataset):
         image = image.resize((1024, 1024))
         
         # Extraction de crops fixes
-        crops = [image.crop((i % 16 * self.taille_crop, i // 16 * self.taille_crop, 
-                             (i % 16 + 1) * self.taille_crop, (i // 16 + 1) * self.taille_crop))
+        crops = [image.crop((i % 8 * self.taille_crop, i // 8 * self.taille_crop, 
+                             (i % 8 + 1) * self.taille_crop, (i // 8 + 1) * self.taille_crop))
                  for i in range(self.num_crop)]
         
         # Ajout des crops aléatoires
@@ -74,8 +75,9 @@ class CustomDatasetCrop(Dataset):
         if self.transform:
             crops = [self.transform(crop) for crop in crops]
         else:
+            
             to_tensor = transforms.Compose([
-                transforms.Grayscale(num_output_channels=3),
+                #transforms.Grayscale(num_output_channels=self.num_channels),
                 transforms.ToTensor()
             ])
             crops = [to_tensor(crop) for crop in crops]
@@ -129,15 +131,14 @@ class CustomTrain_crop(CustomDatasetCrop):
 import os
 
 class CustomTest_crop(CustomDatasetCrop):
-    def __init__(self, size, image_folder, transform=None, random_crops=0):
-        super().__init__(size, image_folder, transform, random_crops)
+    def __init__(self, size, image_folder, transform=None, random_crops=0, num_channels=3):
+        super().__init__(size, image_folder, transform, random_crops, num_channels)
         
         # Walk through the directory structure starting at 'image_folder'
         for root, dirs, files in os.walk(image_folder):
             for file in files:
                 file_path = os.path.join(root, file)
-                print("file", file)
-                print("root", root)
+
                 # Check if the path is indeed a file and not a directory
                 if os.path.isfile(file_path) and file.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp')):
                     # Append the full path of the file to image_paths

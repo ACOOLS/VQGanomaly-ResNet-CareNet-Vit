@@ -37,7 +37,7 @@ class BaseQuantizer(nn.Module):
     
     def forward(self, z: torch.FloatTensor) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.LongTensor]:
         if not self.use_residual:
-            z_q, loss, encoding_indices = self.quantize(z)
+            z_q, loss, _, encoding_indices = self.quantize(z)
         else:
             z_q = torch.zeros_like(z)
             residual = z.detach().clone()
@@ -60,7 +60,9 @@ class BaseQuantizer(nn.Module):
         if self.straight_through:
             z_q = z + (z_q - z).detach()
 
-        return z_q, loss, encoding_indices
+        loss_tensor = None 
+        
+        return z_q, loss, loss_tensor ,  encoding_indices
 
 
 class VectorQuantizer(BaseQuantizer):
@@ -89,5 +91,7 @@ class VectorQuantizer(BaseQuantizer):
         loss = self.beta * torch.mean((z_qnorm.detach() - z_norm)**2) +  \
                torch.mean((z_qnorm - z_norm.detach())**2)
 
-        return z_qnorm, loss, encoding_indices
+        loss_tensor = None 
+        
+        return z_qnorm, loss, loss_tensor , encoding_indices
 

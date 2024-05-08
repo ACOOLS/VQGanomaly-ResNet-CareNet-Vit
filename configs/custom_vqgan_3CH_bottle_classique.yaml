@@ -1,0 +1,54 @@
+model:
+  base_learning_rate: 4.5e-6
+  target: taming.models.vqgan.VQModel
+  params:
+    #embed_dim: 256
+    embed_dim: 32
+    #n_embed: 1024
+    n_embed: 512
+    ddconfig:
+      double_z: False
+      #z_channels: 256
+      z_channels: 32
+      #resolution: 256
+      resolution: 256
+      #in_channels: 3
+      in_channels: 3
+      #out_ch: 3
+      out_ch: 3
+      ch: 64
+      ch_mult: [ 1,2,4]  # num_down = len(ch_mult)-1
+      num_res_blocks: 1
+      attn_resolutions: [16]
+      dropout: 0.0
+
+    lossconfig:
+      target: taming.modules.losses.vqperceptual.VQLPIPSWithDiscriminator
+      params:
+        disc_conditional: False
+        disc_in_channels: 3
+        disc_start: 10000
+        disc_weight: 0.8
+        codebook_weight: 1.0
+
+data:
+  target: main.DataModuleFromConfig
+  params:
+    batch_size: 1
+    num_workers: 1
+    train:
+      target: taming.data.custom.CustomTrain_crop #taming.data.custom.CustomTrain
+      params:
+          image_folder: /home/aurelie/datasets/mvtec_anomaly/bottle/train_mini/
+          size: 1024
+     
+    validation:
+      target: taming.data.custom.CustomTest_crop
+      params:
+          image_folder: /home/aurelie/datasets/mvtec_anomaly/bottle/val_mini/
+
+          size: 1024
+
+lightning: 
+  trainer : 
+    precision : 16

@@ -6,19 +6,19 @@ model:
     patch_size: 8
     encoder:
           dim: 768
-          depth: 12
+          depth: 8
           heads: 12
           mlp_dim: 3072
           channels: 3
     decoder:
           dim: 768
-          depth: 12
+          depth: 8
           heads: 12
           mlp_dim: 3072
           channels : 3
     quantizer:
           embed_dim: 32
-          n_embed: 8192
+          n_embed: 4096
           beta: 0.25
 
     lossconfig:

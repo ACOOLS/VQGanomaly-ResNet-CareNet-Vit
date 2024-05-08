@@ -420,7 +420,7 @@ class ImageLogger(Callback):
                   global_step, current_epoch, batch_idx):
         root = os.path.join(save_dir, "images", split)
         for k in images:
-            grid = torchvision.utils.make_grid(images[k], nrow=16)
+            grid = torchvision.utils.make_grid(images[k], nrow=8)
 
             #grid = (grid+1.0)/2.0 # -1,1 -> 0,1; c,h,w
             grid = grid.transpose(0,1).transpose(1,2).squeeze(-1)
@@ -610,6 +610,7 @@ def main():
         else:
             name = ""
         nowname = now+name+opt.postfix
+        ckpt = None 
     if logdir is None :
         logdir = os.path.join("logs", nowname)
 

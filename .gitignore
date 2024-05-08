@@ -1,2 +1,7 @@
 logs/
+*.cpkt
 *.pth
+Results/
+Test/
+*.png
+myenv/

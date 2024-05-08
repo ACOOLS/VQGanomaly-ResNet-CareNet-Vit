@@ -76,7 +76,13 @@ class VQLPIPSWithDiscriminator(nn.Module):
 
     def forward(self, codebook_loss: torch.FloatTensor, inputs: torch.FloatTensor, reconstructions: torch.FloatTensor, optimizer_idx: int,
                 global_step: int, last_layer: Optional[nn.Module] = None, cond : str = None, split: Optional[str] = "train") -> Tuple:
-        
+            rec_loss = 0.0
+            p_loss = 0.0
+            nll_loss = 0.0 
+            g_loss = 0.0 
+            loss = 0.0
+
+
         
             rec_loss = torch.abs(inputs.contiguous() - reconstructions.contiguous())
             if self.perceptual_weight > 0:
